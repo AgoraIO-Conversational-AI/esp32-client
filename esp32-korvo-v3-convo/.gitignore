@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+managed_components/
+dependencies.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Configuration files with sensitive data
+main/app_config.h
+sdkconfig.old
+sdkconfig.*.old
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
