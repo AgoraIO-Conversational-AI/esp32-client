@@ -1,0 +1,11 @@
+**/main/app_config.h
+
+  # 鏋勫缓浜х墿 - 鑺傜渷绌洪棿
+  **/build/
+  **/managed_components/
+  **/sdkconfig
+
+  # macOS 绯荤粺鏂囦欢
+  .DS_Store
+
+
