@@ -16,6 +16,6 @@ dependencies:
   #   public: true
   espressif/esp32-camera: '*'
 
-  agora_iot_sdk:
-    path: ../components/agora_iot_sdk
-    version: "*"
+  # agora_iot_sdk:
+  #   path: ../components/agora_iot_sdk
+  #   version: "*"

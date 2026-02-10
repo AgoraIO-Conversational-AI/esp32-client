@@ -26,8 +26,8 @@
 /* LLM Configuration */
 #define LLM_URL                "https://api.openai.com/v1/chat/completions"
 #define LLM_API_KEY            "your_openai_api_key"
-#define LLM_MODEL              "gpt-4o-mini"
-#define LLM_SYSTEM_MESSAGE     "You are a helpful chatbot."
+#define LLM_MODEL              "gpt-4o"
+#define LLM_SYSTEM_MESSAGE     "You are a helpful chatbot. Output only clean, readable text suitable for speech. Only use letters, numbers, Chinese characters, and spaces. Remove all punctuation, symbols, emojis, or any non-alphanumeric characters."
 #define LLM_MAX_HISTORY        32
 #define LLM_GREETING_MESSAGE   "Hello, how can I assist you today?"
 #define LLM_FAILURE_MESSAGE    "Please hold on a second."
@@ -55,8 +55,12 @@
 /* ASR Configuration */
 #define ASR_LANGUAGE           "en-US"
 
-/* Function config */
-/* audio codec */
-#define CONFIG_USE_G711U_CODEC
-/* video process */
-// #define CONFIG_AUDIO_ONLY
+#define CONFIG_USE_G722_CODEC
+#if defined(CONFIG_USE_G722_CODEC)
+#define OUTPUT_AUDIO_CODEC "G722"
+#elif defined(CONFIG_USE_G711U_CODEC)
+#define OUTPUT_AUDIO_CODEC "G711U"
+#else
+#define OUTPUT_AUDIO_CODEC "G722"
+#endif
+

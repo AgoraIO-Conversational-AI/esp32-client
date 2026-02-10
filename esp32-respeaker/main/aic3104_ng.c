@@ -68,23 +68,23 @@ esp_err_t aic3104_ng_init(aic3104_ng_t *ctx, int i2c_port, int sda_gpio, int scl
 
     esp_err_t ret = i2c_param_config(i2c_port, &conf);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "i2c_param_config failed: %s", esp_err_to_name(ret));
+       // ESP_LOGE(TAG, "i2c_param_config failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
     ret = i2c_driver_install(i2c_port, conf.mode, 0, 0, 0);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "i2c_driver_install failed: %s", esp_err_to_name(ret));
+      //  ESP_LOGE(TAG, "i2c_driver_install failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    ESP_LOGI(TAG, "I2C initialized: port=%d SDA=GPIO%d SCL=GPIO%d speed=%lu Hz",
-             i2c_port, sda_gpio, scl_gpio, (unsigned long)ctx->speed_hz);
+   // ESP_LOGI(TAG, "I2C initialized: port=%d SDA=GPIO%d SCL=GPIO%d speed=%lu Hz",
+          //   i2c_port, sda_gpio, scl_gpio, (unsigned long)ctx->speed_hz);
 
     // Scan I2C bus to detect devices
-    ret = aic3104_i2c_scan(i2c_port);
+     ret = aic3104_i2c_scan(i2c_port);
 
-    return ret;  // Return scan result
+    return ret;
 }
 
 esp_err_t aic3104_ng_write(aic3104_ng_t *ctx, uint8_t reg, uint8_t val)
@@ -109,14 +109,14 @@ esp_err_t aic3104_ng_probe(aic3104_ng_t *ctx, uint8_t *page_val_out)
     ESP_LOGW(TAG, "probe: write page 0");
     esp_err_t ret = aic3104_ng_write(ctx, AIC3104_PAGE_CTRL, 0x00);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "write page failed: %s", esp_err_to_name(ret));
+      //  ESP_LOGE(TAG, "write page failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
     uint8_t v = 0xFF;
     ret = aic3104_ng_read(ctx, AIC3104_PAGE_CTRL, &v);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "read page failed: %s", esp_err_to_name(ret));
+      //  ESP_LOGE(TAG, "read page failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
