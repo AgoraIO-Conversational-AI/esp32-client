@@ -341,7 +341,7 @@ static char *_build_join_json(void)
 
     // Add parameters
     cJSON *parameters = cJSON_CreateObject();
-    cJSON_AddStringToObject(parameters, "output_audio_codec", "PCMU");
+    cJSON_AddStringToObject(parameters, "output_audio_codec", OUTPUT_AUDIO_CODEC);
     cJSON_AddItemToObject(properties, "parameters", parameters);
 
     // Add idle timeout
@@ -455,7 +455,10 @@ void ai_agent_start(void)
     }
 
     printf("Request URL: %s\n", url);
-    printf("Request JSON: %s\n", json_data);
+    printf("========================================\n");
+    printf("Start Request Body:\n");
+    printf("%s\n", json_data);
+    printf("========================================\n");
 
     // Initialize HTTP client with SSL configuration
     esp_http_client_config_t config = {

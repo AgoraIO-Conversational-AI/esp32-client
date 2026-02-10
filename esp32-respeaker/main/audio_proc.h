@@ -26,13 +26,6 @@ void setup_audio(void);
 /* start audio process */
 int audio_start_proc(void);
 
-/* get current volume */
-int audio_get_volume(void);
-
-/* set volume */
-void audio_set_volume(int volume);
-
-
 #ifdef __cplusplus
 }
 #endif

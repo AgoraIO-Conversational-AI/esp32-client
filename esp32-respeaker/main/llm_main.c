@@ -217,13 +217,19 @@ int app_main(void)
 
   // XVF3800 button handler will be initialized after audio_board_init()
   // (audio_board_init() will configure I2C for AIC3104)
-
+   // setup_audio();
   // Small delay before XVF3800 init
   vTaskDelay(pdMS_TO_TICKS(500));
 
   // Suppress I2C_BUS error logs BEFORE starting button handler
   // The I2C errors are intentional - they occur during button press detection
   esp_log_level_set("I2C_BUS", ESP_LOG_NONE);
+  esp_log_level_set("i2c", ESP_LOG_NONE);
+  esp_log_level_set("XVF3800", ESP_LOG_WARN);
+  esp_log_level_set("ES7210", ESP_LOG_WARN);
+  esp_log_level_set("DRV8311", ESP_LOG_WARN);
+  esp_log_level_set("AUDIO_HAL", ESP_LOG_WARN);
+  esp_log_level_set("AUDIO_BOARD", ESP_LOG_WARN);
 
   // Initialize XVF3800 button handler for ReSpeaker
   setup_key_button();

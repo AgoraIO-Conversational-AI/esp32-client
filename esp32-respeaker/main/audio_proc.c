@@ -1,7 +1,6 @@
 #include <string.h>
 
 #include <pthread.h>
-
 #include "board.h"
 #include "audio_element.h"
 #include "audio_hal.h"
@@ -10,6 +9,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_pm.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "i2c_bus.h"
@@ -24,6 +24,7 @@
 
 #include "common.h"
 #include "rtc_proc.h"
+#include "aic3104_ng.h"
 
 
 
@@ -32,7 +33,7 @@ static audio_pipeline_handle_t recorder, player;
 static SemaphoreHandle_t g_audio_capture_sem  = NULL;
 static audio_thread_t *g_audio_thread;
 
-audio_board_handle_t board_handle;
+static aic3104_ng_t g_aic3104 = {0};
 
 
 int audio_sema_init(void)
@@ -76,9 +77,10 @@ static esp_err_t recorder_pipeline_open(void)
 
   algorithm_stream_cfg_t algo_config = ALGORITHM_STREAM_CFG_DEFAULT();
   algo_config.input_type = ALGORITHM_STREAM_INPUT_TYPE1;
-  algo_config.algo_mask  = ALGORITHM_STREAM_USE_AEC;
+  algo_config.algo_mask  = ALGORITHM_STREAM_USE_AGC | ALGORITHM_STREAM_USE_NS;  // Use hardware AEC, only enable AGC and NS
   algo_config.swap_ch    = true;
   algo_config.task_stack = 8192;  // Increased from default to prevent stack overflow
+  algo_config.sample_rate = CONFIG_PCM_SAMPLE_RATE;  // Set sample rate for algorithm stream
   element_algo = algo_stream_init(&algo_config);
   audio_element_set_music_info(element_algo, CONFIG_PCM_SAMPLE_RATE, 1, 16);
 
@@ -179,10 +181,19 @@ int playback_stream_write(char *data, int len)
 
 void setup_audio(void)
 {
-  board_handle = audio_board_init();
-  audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_START);
-  audio_hal_set_volume(board_handle->audio_hal, 85);
-  printf("setup_audio: audio_board initialized\n");
+  esp_err_t ret = aic3104_ng_init(&g_aic3104, I2C_NUM_0, GPIO_NUM_5, GPIO_NUM_6, 100000);
+  if (ret != ESP_OK) {
+    printf("setup_audio: AIC3104 I2C init failed: %s\n", esp_err_to_name(ret));
+    return;
+  }
+
+  ret = aic3104_ng_setup_default(&g_aic3104);
+  if (ret != ESP_OK) {
+    printf("setup_audio: AIC3104 setup failed: %s\n", esp_err_to_name(ret));
+    return;
+  }
+
+  printf("setup_audio: AIC3104 initialized\n");
 }
 
 int audio_start_proc(void)
@@ -194,16 +205,4 @@ int audio_start_proc(void)
   }
 
   return rval;
-}
-
-int audio_get_volume(void)
-{
-  int volume = 0;
-  audio_hal_get_volume(board_handle->audio_hal, &volume);
-  return volume;
-}
-
-void audio_set_volume(int volume)
-{
-  audio_hal_set_volume(board_handle->audio_hal, volume);
 }
