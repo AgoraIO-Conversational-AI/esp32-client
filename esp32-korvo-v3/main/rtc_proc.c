@@ -181,18 +181,16 @@ int agora_rtc_proc_create(char *license, uint32_t uid)
   channel_options.auto_subscribe_audio = true;
   channel_options.auto_subscribe_video = false;
 
-#ifdef CONFIG_SEND_PCM_DATA
   /* If we want to send PCM data instead of encoded audio like AAC or Opus, here please enable
    * audio codec, as well as configure the PCM sample rate and number of channels
    */
-  channel_options.audio_codec_opt.audio_codec_type = AUDIO_CODEC_TYPE;
-  channel_options.audio_codec_opt.pcm_sample_rate  = CONFIG_PCM_SAMPLE_RATE; 
+  channel_options.audio_codec_opt.audio_codec_type = g_app.rtc_audio_codec_type;
+  channel_options.audio_codec_opt.pcm_sample_rate  = g_app.pcm_sample_rate;
   channel_options.audio_codec_opt.pcm_channel_num  = CONFIG_PCM_CHANNEL_NUM;
-#endif
 
-  rval = agora_rtc_join_channel(g_conn_id, AI_AGENT_CHANNEL_NAME, uid, g_app.token, &channel_options);
+  rval = agora_rtc_join_channel(g_conn_id, g_app.channel_name, uid, g_app.token, &channel_options);
   if (rval < 0) {
-    printf("Failed to join channel \"%s\", reason: %s\n", AI_AGENT_CHANNEL_NAME, agora_rtc_err_2_str(rval));
+    printf("Failed to join channel \"%s\", reason: %s\n", g_app.channel_name, agora_rtc_err_2_str(rval));
     return -1;
   }
 

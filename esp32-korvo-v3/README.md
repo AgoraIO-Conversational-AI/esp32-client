@@ -36,7 +36,8 @@ This project is specifically designed for:
 - [Compilation and Flashing](#compilation-and-flashing)
 - [Usage Guide](#usage-guide)
 - [Project Architecture](#project-architecture)
-- [Troubleshooting](#troubleshooting)
+- [Agora Conversational AI API Reference](#agora-conversational-ai-api-reference)
+- [About Agora](#about-agora)
 
 ---
 
@@ -178,12 +179,16 @@ ESP32 Board          Agora API Server       Agora RTC Network      AI Agent Serv
    - **Start Agent**: `POST /projects/{appid}/agents/join` with LLM/TTS/ASR configuration
    - **Stop Agent**: `POST /projects/{appid}/agents/leave` with agent ID
 
-2. **Agora Conversational AI Service** (Cloud)
+2. **Agora IoT SDK** (`components/agora_iot_sdk/`)
+   - Provides the embedded Agora RTC SDK used by the device
+   - Handles RTC channel join/leave and real-time audio transport on ESP32
+
+3. **Agora Conversational AI Service** (Cloud)
    - Receives RESTful API calls from ESP32
    - Creates/destroys AI agents dynamically per channel
    - Each agent includes: ASR (speech-to-text) → LLM (conversation) → TTS (text-to-speech)
 
-3. **Agora RTC Network** (Cloud)
+4. **Agora RTC Network** (Cloud)
    - Transports real-time audio between ESP32 board and AI agent
    - Uses G.711 μ-law codec at 8kHz sample rate
 
@@ -232,7 +237,7 @@ esp32-korvo-v3-convo/
 │           ├── libahpl.a
 │           └── librtsa.a
 ├── main/                               Application code
-│   ├── app_config.h.example            ← Configuration template
+│   ├── app_config.h                    Embedded AI Agent JSON config
 │   ├── ai_agent.c                      AI Agent API client (HTTP POST /join, /leave)
 │   ├── ai_agent.h
 │   ├── audio_proc.c                    Audio pipeline (I2S, AEC)
@@ -242,6 +247,7 @@ esp32-korvo-v3-convo/
 │   ├── llm_main.c                      Main application (WiFi, button control)
 │   ├── common.h
 │   ├── CMakeLists.txt
+│   ├── project_config.h                Local credentials and WiFi config
 │   └── Kconfig.projbuild
 ├── partitions.csv                      Flash partition table
 ├── sdkconfig.defaults                  ESP-IDF default config
@@ -348,29 +354,77 @@ components/agora_iot_sdk/
 
 ## Project Configuration
 
-### Step 1: Create Configuration File
+This project now uses **two configuration files**:
 
-```bash
-# Copy the example configuration
-cp main/app_config.h.example main/app_config.h
+- `main/project_config.h`: compile-time local settings used by the firmware itself, including Agora credentials, RTC App ID/token, and WiFi.
+- `main/app_config.h`: embedded JSON payload sent to the Agora Conversational AI Agent `/join` API, including agent name, channel, LLM/ASR/TTS, and audio parameters.
+
+### Step 1: Edit `main/project_config.h`
+
+Update the local project-level macros first:
+
+```c
+#pragma once
+
+#define AGORA_AI_AGENT_API_URL "https://api.agora.io/api/conversational-ai-agent/v2/projects"
+#define AGORA_API_KEY          "YOUR_AGORA_API_KEY"
+#define AGORA_API_SECRET       "YOUR_AGORA_API_SECRET"
+
+#define AGORA_APP_ID           "YOUR_AGORA_APP_ID"
+#define AGORA_RTC_TOKEN        ""   // Optional: provide RTC token if your project requires it
+
+#define WIFI_SSID              "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD          "YOUR_WIFI_PASSWORD"
 ```
+
+Notes:
+
+1. `AGORA_API_KEY` and `AGORA_API_SECRET` are used for the HTTP Basic Auth header when calling the Conversational AI Agent REST API.
+2. `AGORA_APP_ID` and `AGORA_RTC_TOKEN` are copied into the RTC runtime config in `llm_main.c`.
 
 ### Step 2: Edit `main/app_config.h`
 
-Open `main/app_config.h` and configure the following:
+`main/app_config.h` is a JSON document embedded into the firmware by `EMBED_TXTFILES` and sent as the AI Agent configuration body.
 
-#### 1. Agora Credentials
+At minimum, make sure the following fields are correct:
 
-```c
-// Agora Conversational AI Agent API
-#define AGORA_API_KEY                "YOUR_AGORA_API_KEY"
-#define AGORA_API_SECRET             "YOUR_AGORA_API_SECRET"
-
-// Agora RTC Configuration
-#define AGORA_APP_ID                 "YOUR_AGORA_APP_ID"
-#define AGORA_RTC_TOKEN              ""  // Optional: Use token for production
-#define BOARD_RTC_UID                1002  // Board's UID for RTC connection
+```json
+{
+  "name": "your_agent_name",
+  "properties": {
+    "channel": "your_channel_name",
+    "agent_rtc_uid": "1000",
+    "remote_rtc_uids": ["12345"],
+    "parameters": {
+      "output_audio_codec": "PCMU"
+    },
+    "llm": {
+      "url": "https://your-llm-endpoint",
+      "api_key": "YOUR_LLM_API_KEY",
+      "greeting_message": "Hello",
+      "params": {
+        "model": "YOUR_MODEL"
+      }
+    },
+    "asr": {
+      "language": "auto"
+    },
+    "tts": {
+      "vendor": "null",
+      "enable": false
+    }
+  }
+}
 ```
+
+Key fields:
+
+1. `name`: Agora agent name.
+2. `properties.channel`: RTC channel used by both the board and the cloud agent.
+3. `properties.agent_rtc_uid`: RTC UID for the cloud AI agent.
+4. `properties.remote_rtc_uids[0]`: RTC UID for the board/device. This must match the UID the device uses as the remote target.
+5. `properties.parameters.output_audio_codec`: required by the firmware parser. Currently supported values are `PCMU` and `G722`.
+6. `properties.llm` / `properties.asr` / `properties.tts`: provider-specific model and API settings sent directly to Agora when starting the agent.
 
 **How to get your Agora credentials:**
 
@@ -382,64 +436,7 @@ Open `main/app_config.h` and configure the following:
 
 For detailed instructions, see: [Manage Agora Account - Conversational AI](https://docs.agora.io/en/conversational-ai/get-started/manage-agora-account)
 
-> **Note:** The Conversational AI feature must be enabled in your Agora project before you can use the RESTful API.
-
-#### 2. AI Agent Configuration
-
-```c
-// AI Agent Configuration
-#define AI_AGENT_NAME                "my_agent"
-#define AI_AGENT_CHANNEL_NAME        "test_channel"
-#define AI_AGENT_TOKEN               ""  // Optional: RTC token for agent
-#define AI_AGENT_RTC_UID             1001  // AI Agent's UID in RTC channel
-#define AI_AGENT_USER_ID             1002  // Board's UID (remote_rtc_uid)
-```
-
-#### 3. LLM Configuration
-
-**OpenAI Example:**
-```c
-#define LLM_API_URL                  "https://api.openai.com/v1/chat/completions"
-#define LLM_API_KEY                  "YOUR_OPENAI_API_KEY"
-#define LLM_MODEL                    "gpt-4o-mini"
-#define LLM_SYSTEM_MESSAGE           "You are a helpful chatbot."
-#define LLM_GREETING                 "Hello, how can I assist you today?"
-```
-
-**Azure OpenAI Example:**
-```c
-#define LLM_API_URL                  "https://your-resource.openai.azure.com/openai/deployments/your-deployment/chat/completions?api-version=2024-02-15-preview"
-#define LLM_API_KEY                  "your-azure-api-key"
-#define LLM_MODEL                    "gpt-4"
-```
-
-#### 4. TTS Configuration
-
-**Microsoft Azure TTS:**
-```c
-#define TTS_VENDOR                   "microsoft"
-#define TTS_API_KEY                  "YOUR_AZURE_TTS_API_KEY"
-#define TTS_REGION                   "YOUR_AZURE_REGION"  // e.g., "japanwest", "eastus"
-#define TTS_VOICE_NAME               "en-US-AndrewMultilingualNeural"
-```
-
-For other TTS providers (Cartesia, ElevenLabs, etc.), see: [Agora TTS Overview](https://docs.agora.io/en/conversational-ai/models/tts/overview)
-
-#### 5. ASR Configuration
-
-```c
-#define ASR_LANGUAGE                 "en-US"
-```
-
-#### 6. WiFi Configuration (via menuconfig)
-
-WiFi credentials are configured through `idf.py menuconfig`:
-
-```bash
-idf.py menuconfig
-```
-
-Navigate to: `Agora Demo for ESP32` → Configure WiFi SSID and Password
+> **Note:** The Conversational AI feature must be enabled in your Agora project before you can use the REST API.
 
 ---
 
@@ -477,17 +474,9 @@ cd /path/to/esp32-korvo-v3-convo
 idf.py set-target esp32s3
 ```
 
-### Step 4: Configure WiFi
+### Step 4: Review Optional Project Settings
 
-```bash
-idf.py menuconfig
-```
-
-Navigate to: `Agora Demo for ESP32` → Configure your WiFi SSID and Password
-
-**Optional FreeRTOS Configuration:**
-- Navigate to: `Component config` → `FreeRTOS` → `Kernel`
-- Enable `configENABLE_BACKWARD_COMPATIBILITY`
+WiFi is configured in `main/project_config.h`, so `idf.py menuconfig` is no longer required for SSID/password setup.
 
 ### Step 5: Build
 
@@ -516,20 +505,6 @@ idf.py -p /dev/cu.usbserial-* flash monitor
 **Windows:**
 ```bash
 idf.py -p COM3 flash monitor
-```
-
-**Fix Permission Issues (Linux):**
-```bash
-sudo usermod -aG dialout $USER
-# Logout and login again
-```
-
-**Troubleshooting Flash Issues:**
-
-If you encounter connection errors at high baud rates:
-```bash
-# Try lower baud rate
-idf.py -p /dev/ttyUSB0 -b 115200 flash monitor
 ```
 
 ---
@@ -618,111 +593,10 @@ I2S Stream Writer
 Speaker (ES8311 Codec)
 ```
 
-### Component Overview
-
-| Component | Purpose |
-|-----------|---------|
-| **llm_main.c** | Main application, WiFi init, button monitoring |
-| **ai_agent.c** | Agora Conversational AI API client (POST /join, POST /leave) |
-| **audio_proc.c** | Audio pipeline setup (I2S, AEC, streams) |
-| **rtc_proc.c** | Agora RTC handling (join/leave channel, audio TX/RX) |
-| **common.h** | Shared definitions and structures |
-| **app_config.h** | Configuration parameters (credentials, settings) |
-
-### API Implementation Details
-
-The `ai_agent.c` file implements two main functions:
-
-#### `ai_agent_start()`
-- Sends `POST /projects/{appid}/agents/join` request
-- Includes LLM, TTS, ASR configuration in JSON body
-- Uses HTTP basic authentication (API Key:Secret)
-- Returns agent ID on success (HTTP 200)
-
-#### `ai_agent_stop()`
-- Sends `POST /projects/{appid}/agents/leave` request
-- Includes agent ID in JSON body
-- Destroys the AI agent in Agora cloud
-
----
-
 ## Agora Conversational AI API Reference
-
-This project uses **Agora Conversational AI Agent API v2** via RESTful HTTP calls.
-
-### Start Agent Request
-
-**Endpoint:** `POST https://api.agora.io/api/conversational-ai-agent/v2/projects/{appid}/agents/join`
-
-**Authentication:** HTTP Basic Auth (API Key:API Secret in Base64)
-
-**Request Body:**
-```json
-{
-  "name": "my_agent",
-  "properties": {
-    "channel": "test_channel",
-    "token": "",
-    "agent_rtc_uid": 1001,
-    "remote_rtc_uids": [1002],
-    "parameters": {
-      "output_audio_codec": "PCMU"
-    },
-    "idle_timeout": 120,
-    "advanced_features": {
-      "enable_aivad": true
-    },
-    "llm": {
-      "api_url": "https://api.openai.com/v1/chat/completions",
-      "api_key": "YOUR_KEY",
-      "model": "gpt-4o-mini",
-      "system_message": "You are a helpful chatbot.",
-      "greeting": "Hello, how can I assist you today?"
-    },
-    "tts": {
-      "vendor": "microsoft",
-      "api_key": "YOUR_KEY",
-      "region": "japanwest",
-      "voice_name": "en-US-AndrewMultilingualNeural"
-    },
-    "asr": {
-      "language": "en-US"
-    }
-  }
-}
-```
-
-**Response (HTTP 200):**
-```json
-{
-  "code": "ok",
-  "data": {
-    "agent_id": "abc123..."
-  }
-}
-```
-
-### Stop Agent Request
-
-**Endpoint:** `POST https://api.agora.io/api/conversational-ai-agent/v2/projects/{appid}/agents/leave`
-
-**Request Body:**
-```json
-{
-  "agent_id": "abc123..."
-}
-```
-
-**Response (HTTP 200):**
-```json
-{
-  "code": "ok"
-}
-```
 
 ### API Documentation
 
-For complete API documentation:
 - [Agora Conversational AI - Join API](https://docs.agora.io/en/conversational-ai/rest-api/agent/join)
 - [Agora Conversational AI - Leave API](https://docs.agora.io/en/conversational-ai/rest-api/agent/leave)
 
@@ -739,24 +613,3 @@ Agora provides real-time engagement APIs that power billions of minutes of live 
 - [Agora IoT SDK](https://docs.agora.io/en/iot)
 - [Conversational AI Agent API](https://docs.agora.io/en/conversational-ai)
 - [ESP32-S3-Korvo-2 Hardware Guide](https://docs.espressif.com/projects/esp-adf/en/latest/design-guide/dev-boards/user-guide-esp32-s3-korvo-2.html)
-
----
-
-## License
-
-This project includes:
-- Agora IoT SDK (proprietary)
-- ESP-IDF (Apache 2.0)
-- ESP-ADF (Apache 2.0)
-
-See individual component licenses for details.
-
----
-
-## Contributing
-
-Contributions are welcome! Please submit pull requests or open issues for bugs and feature requests.
-
----
-
-**For technical support, visit the [Agora Developer Community](https://www.agora.io/en/community/) or contact Agora support.**

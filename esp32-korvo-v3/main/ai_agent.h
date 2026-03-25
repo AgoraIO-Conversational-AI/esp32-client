@@ -7,8 +7,10 @@ extern "C" {
 
 #include <stdlib.h>
 
+int ai_agent_load_config(void);
+
 /* start ai agent */
-void ai_agent_start(void);
+int ai_agent_start(void);
 
 /* stop ai agent */
 void ai_agent_stop(void);

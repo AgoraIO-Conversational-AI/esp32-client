@@ -66,7 +66,7 @@ static esp_err_t recorder_pipeline_open(void)
     return ESP_FAIL;
   }
 
-  i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT_WITH_PARA(CODEC_ADC_I2S_PORT, CONFIG_PCM_SAMPLE_RATE, AUDIO_I2S_BITS, AUDIO_STREAM_READER);
+  i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT_WITH_PARA(CODEC_ADC_I2S_PORT, g_app.pcm_sample_rate, AUDIO_I2S_BITS, AUDIO_STREAM_READER);
   i2s_cfg.task_core     = 0;
   i2s_cfg.stack_in_ext  = true;
   i2s_stream_set_channel_type(&i2s_cfg, I2S_CHANNEL_TYPE_ONLY_LEFT);
@@ -77,10 +77,12 @@ static esp_err_t recorder_pipeline_open(void)
   algorithm_stream_cfg_t algo_config = ALGORITHM_STREAM_CFG_DEFAULT();
   algo_config.input_type = ALGORITHM_STREAM_INPUT_TYPE1;
   // algo_config.algo_mask  = ALGORITHM_STREAM_USE_AEC;
+  algo_config.sample_rate = g_app.pcm_sample_rate;
   algo_config.swap_ch    = true;
+  algo_config.aec_low_cost = true;
   algo_config.task_stack = 8 * 1024;  // Increase from 5KB to 8KB to prevent stack overflow
   element_algo = algo_stream_init(&algo_config);
-  audio_element_set_music_info(element_algo, CONFIG_PCM_SAMPLE_RATE, 1, 16);
+  audio_element_set_music_info(element_algo, g_app.pcm_sample_rate, 1, 16);
 
   raw_stream_cfg_t raw_cfg = RAW_STREAM_CFG_DEFAULT();
   raw_cfg.type        = AUDIO_STREAM_READER;
@@ -113,7 +115,7 @@ static esp_err_t player_pipeline_open(void)
   raw_cfg.out_rb_size = 8 * 1024;
   raw_write = raw_stream_init(&raw_cfg);
 
-  i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT_WITH_PARA(CODEC_ADC_I2S_PORT, CONFIG_PCM_SAMPLE_RATE, AUDIO_I2S_BITS, AUDIO_STREAM_WRITER);
+  i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT_WITH_PARA(CODEC_ADC_I2S_PORT, g_app.pcm_sample_rate, AUDIO_I2S_BITS, AUDIO_STREAM_WRITER);
   i2s_cfg.need_expand  = true;
   i2s_stream_set_channel_type(&i2s_cfg, I2S_CHANNEL_TYPE_ONLY_LEFT);
   i2s_cfg.stack_in_ext = true;
@@ -138,7 +140,7 @@ static void audio_send_thread(void *arg)
 {
   int ret = 0;
 
-  uint8_t *audio_pcm_buf = heap_caps_malloc(CONFIG_PCM_DATA_LEN, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  uint8_t *audio_pcm_buf = heap_caps_malloc(g_app.pcm_data_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!audio_pcm_buf) {
     printf("Failed to alloc audio buffer!\n");
     goto THREAD_END;
@@ -152,12 +154,12 @@ static void audio_send_thread(void *arg)
   audio_pipeline_run(recorder);
   audio_pipeline_run(player);
   while (g_app.b_call_session_started) {
-    ret = raw_stream_read(raw_read, (char *)audio_pcm_buf, CONFIG_PCM_DATA_LEN);
-    if (ret != CONFIG_PCM_DATA_LEN) {
-      printf("read raw stream error, expect %d, but only %d\n", CONFIG_PCM_DATA_LEN, ret);
+    ret = raw_stream_read(raw_read, (char *)audio_pcm_buf, g_app.pcm_data_len);
+    if (ret != g_app.pcm_data_len) {
+      printf("read raw stream error, expect %d, but only %d\n", g_app.pcm_data_len, ret);
     }
 
-    send_rtc_audio_frame(audio_pcm_buf, CONFIG_PCM_DATA_LEN);
+    send_rtc_audio_frame(audio_pcm_buf, g_app.pcm_data_len);
   }
 
   //deinit

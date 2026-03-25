@@ -5,33 +5,20 @@ extern "C" {
 #endif
 
 #include <stdlib.h>
-#include "app_config.h"
+#include <stdint.h>
+#include "project_config.h"
 
 #define RTC_APP_ID_LEN   64
 #define RTC_TOKEN_LEN    512
+#define WIFI_SSID_LEN    64
+#define WIFI_PASSWORD_LEN 64
+#define AI_AGENT_NAME_LEN 128
+#define AI_AGENT_CHANNEL_LEN 128
 
 #define AUDIO_I2S_BITS   32
 #define PRIO_TASK_FETCH (21)
 
-#if defined(CONFIG_USE_G722_CODEC)
-#define AUDIO_CODEC_TYPE AUDIO_CODEC_TYPE_G722
-#define CONFIG_PCM_SAMPLE_RATE (16000)
-#define CONFIG_PCM_DATA_LEN     640
-#define CONFIG_SEND_PCM_DATA
-#define TENAI_AUDIO_CODEC           "{\"che.audio.custom_payload_type\":9}"
-#elif defined(CONFIG_USE_G711U_CODEC)
-#define AUDIO_CODEC_TYPE AUDIO_CODEC_TYPE_G711U
-#define CONFIG_PCM_SAMPLE_RATE (8000)
-#define CONFIG_PCM_DATA_LEN     320
-#define CONFIG_SEND_PCM_DATA
-#define TENAI_AUDIO_CODEC           "{\"che.audio.custom_payload_type\":0}"
-#else
-#pragma message "should config audio codec type first"
-#endif
-
 #define CONFIG_PCM_CHANNEL_NUM (1)
-#define CONFIG_AUDIO_FRAME_DURATION_MS                                               \
-  (CONFIG_PCM_DATA_LEN * 1000 / CONFIG_PCM_SAMPLE_RATE / CONFIG_PCM_CHANNEL_NUM / sizeof(int16_t))
 
 
 typedef struct {
@@ -42,8 +29,17 @@ typedef struct {
 
   char app_id[RTC_APP_ID_LEN];
   char token[RTC_TOKEN_LEN];
+  char wifi_ssid[WIFI_SSID_LEN];
+  char wifi_password[WIFI_PASSWORD_LEN];
   char agent_id[128];  // Store agent ID from start response
-
+  char agent_name[AI_AGENT_NAME_LEN];
+  char channel_name[AI_AGENT_CHANNEL_LEN];
+  uint32_t agent_rtc_uid;
+  uint32_t remote_rtc_uid;
+  int rtc_audio_codec_type;
+  int pcm_sample_rate;
+  int pcm_data_len;
+	
 } app_t;
 
 extern app_t g_app;

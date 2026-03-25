@@ -34,13 +34,13 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_pm.h"
+#include "esp_system.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "i2c_bus.h"
 #include "input_key_service.h"
 #include "nvs_flash.h"
-
 #include "ai_agent.h"
 #include "audio_proc.h"
 #include "common.h"
@@ -87,11 +87,13 @@ static void setup_wifi(void)
 
   wifi_config_t wifi_config = {
     .sta = {
-      .ssid            = CONFIG_WIFI_SSID,
-      .password        = CONFIG_WIFI_PASSWORD,
       .listen_interval = CONFIG_EXAMPLE_WIFI_LISTEN_INTERVAL,
     },
   };
+  strncpy((char *)wifi_config.sta.ssid, g_app.wifi_ssid, sizeof(wifi_config.sta.ssid) - 1);
+  wifi_config.sta.ssid[sizeof(wifi_config.sta.ssid) - 1] = '\0';
+  strncpy((char *)wifi_config.sta.password, g_app.wifi_password, sizeof(wifi_config.sta.password) - 1);
+  wifi_config.sta.password[sizeof(wifi_config.sta.password) - 1] = '\0';
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
   ESP_ERROR_CHECK(esp_wifi_start());
@@ -119,8 +121,12 @@ static esp_err_t input_key_service_cb(periph_service_handle_t handle, periph_ser
       if (evt->type == INPUT_KEY_SERVICE_ACTION_CLICK_RELEASE) {
         if (!g_app.b_ai_agent_joined) {
           // start ai agent
-          ai_agent_start();
-          g_app.b_ai_agent_joined = true;
+          int start_ret = ai_agent_start();
+          if (start_ret == 0) {
+            g_app.b_ai_agent_joined = true;
+          } else {
+            g_app.b_ai_agent_joined = false;
+          }
         } else {
           printf("Ai Agent has already Started.\n");
         }
@@ -190,6 +196,11 @@ int app_main(void)
   }
   ESP_ERROR_CHECK(ret);
 
+  strncpy(g_app.wifi_ssid, WIFI_SSID, WIFI_SSID_LEN - 1);
+  g_app.wifi_ssid[WIFI_SSID_LEN - 1] = '\0';
+  strncpy(g_app.wifi_password, WIFI_PASSWORD, WIFI_PASSWORD_LEN - 1);
+  g_app.wifi_password[WIFI_PASSWORD_LEN - 1] = '\0';
+
   // init and start wifi
   setup_wifi();
 
@@ -198,11 +209,15 @@ int app_main(void)
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 
-  // Use APP_ID and TOKEN from app_config.h
+  // Use APP_ID and TOKEN from project_config.h
   strncpy(g_app.app_id, AGORA_APP_ID, RTC_APP_ID_LEN - 1);
   g_app.app_id[RTC_APP_ID_LEN - 1] = '\0';
   strncpy(g_app.token, AGORA_RTC_TOKEN, RTC_TOKEN_LEN - 1);
   g_app.token[RTC_TOKEN_LEN - 1] = '\0';
+  if (ai_agent_load_config() != 0) {
+    printf("Failed to load AI agent config from app_config.h\n");
+    return -1;
+  }
   g_app.b_ai_agent_generated = true;
 
   // init and start key button
@@ -214,7 +229,7 @@ int app_main(void)
   audio_start_proc();
 
   // Create Agora RTC session
-  agora_rtc_proc_create(NULL, AI_AGENT_USER_ID);
+  agora_rtc_proc_create(NULL, g_app.remote_rtc_uid);
 
   while(!g_app.b_call_session_started) {
     usleep(200 * 1000);
