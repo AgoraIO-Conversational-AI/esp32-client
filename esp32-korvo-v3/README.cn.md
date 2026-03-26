@@ -335,7 +335,7 @@ cd /path/to/esp32-korvo-v3-convo/components
 
 # 下载并解压 Agora IoT SDK
 wget https://rte-store.s3.amazonaws.com/agora_iot_sdk.tar
-tar -xvf agora_iot_sdk.tar
+mkdir -p agora_iot_sdk && tar -xf agora_iot_sdk.tar -C agora_iot_sdk
 ```
 
 解压后，验证目录结构：
