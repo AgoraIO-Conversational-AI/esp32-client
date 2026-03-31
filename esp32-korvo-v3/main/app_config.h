@@ -3,6 +3,7 @@
     "properties": {
         "channel": "esp32_conversation",
         "agent_rtc_uid": "1234",
+        "token": "",
         "remote_rtc_uids": [
             "5678"
         ],
