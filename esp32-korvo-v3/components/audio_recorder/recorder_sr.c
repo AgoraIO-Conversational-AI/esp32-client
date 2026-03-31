@@ -113,9 +113,9 @@ static recorder_sr_result_t *recorder_sr_afe_result_convert(
             break;
         case WAKENET_NO_DETECT:
             if (recorder_sr->vad_enable) {
-                if (afe_result->vad_state == VAD_SILENCE) {
+                if (afe_result->vad_state == AFE_VAD_SILENCE) {
                     sr_result->type = SR_RESULT_NOISE;
-                } else if (afe_result->vad_state == VAD_SPEECH) {
+                } else if (afe_result->vad_state == AFE_VAD_SPEECH) {
                     sr_result->type = SR_RESULT_SPEECH;
                 } else {
                     ESP_LOGE(TAG, "vad state error");
@@ -603,7 +603,7 @@ recorder_sr_handle_t recorder_sr_create(recorder_sr_cfg_t *cfg, recorder_sr_ifac
     cfg->afe_cfg.wakenet_model_name_2 = wn_name_2;
 
     // Use new ESP-SR API
-    recorder_sr->afe_iface = esp_afe_handle_from_config(&cfg->afe_cfg);
+    recorder_sr->afe_iface = (esp_afe_sr_iface_t *)&ESP_AFE_SR_HANDLE;
     AUDIO_NULL_CHECK(TAG, recorder_sr->afe_iface, goto _failed);
 
     recorder_sr->afe_handle = recorder_sr->afe_iface->create_from_config(&cfg->afe_cfg);
