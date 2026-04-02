@@ -602,7 +602,7 @@ recorder_sr_handle_t recorder_sr_create(recorder_sr_cfg_t *cfg, recorder_sr_ifac
     cfg->afe_cfg.wakenet_model_name = wn_name;
     cfg->afe_cfg.wakenet_model_name_2 = wn_name_2;
 
-    // Use new ESP-SR API
+    // Keep compatibility with the ADF v2.7 esp-sr interface used by this toolchain.
     recorder_sr->afe_iface = (esp_afe_sr_iface_t *)&ESP_AFE_SR_HANDLE;
     AUDIO_NULL_CHECK(TAG, recorder_sr->afe_iface, goto _failed);
 
