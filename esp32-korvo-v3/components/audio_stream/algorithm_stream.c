@@ -153,10 +153,10 @@ void _algo_fetch_task(void *pv)
         if (res && res->ret_value != ESP_FAIL) {
             audio_element_output(self, (char *)res->data, afe_chunksize * sizeof(int16_t));
             switch (res->vad_state) {
-                case VAD_SILENCE:
+                case AFE_VAD_SILENCE:
                     ESP_LOGD(TAG, "VAD state : SILENCE");
                     break;
-                case VAD_SPEECH:
+                case AFE_VAD_SPEECH:
                     ESP_LOGD(TAG, "VAD state : SPEECH");
                     break;
             }
@@ -173,76 +173,47 @@ static esp_err_t _algo_open(audio_element_handle_t self)
     algo_stream_t *algo = (algo_stream_t *)audio_element_getdata(self);
     AUDIO_NULL_CHECK(TAG, algo, return ESP_FAIL);
 
-    // Prepare input format string based on microphone and reference channels
-    char input_format[16];
-    int offset = 0;
-    for (int i = 0; i < algo->mic_ch; i++) {
-        input_format[offset++] = 'M';
-    }
-    input_format[offset++] = 'R';  // Reference channel
-    input_format[offset] = '\0';
-
-    // Determine AFE type and mode
-    afe_type_t afe_type = algo->aec_low_cost ? AFE_TYPE_SR : AFE_TYPE_VC;
-    afe_mode_t afe_mode = AFE_MODE_HIGH_PERF;
-
-    // Initialize models
-    srmodel_list_t *models = NULL;
+    afe_config_t afe_config = AFE_CONFIG_DEFAULT();
+    afe_config.vad_init = false;
+    afe_config.wakenet_init = false;
+    afe_config.afe_perferred_core = 1;
+    afe_config.afe_perferred_priority = 21;
+    afe_config.memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
+    afe_config.pcm_config.mic_num = algo->mic_ch;
+    afe_config.pcm_config.ref_num = 1;
+    afe_config.pcm_config.total_ch_num = algo->mic_ch + 1;
 #ifdef CONFIG_USE_NSNET
-    if (algo->models) {
-        models = algo->models;
-    }
-#endif
+    char *model_name = esp_srmodel_filter(algo->models, ESP_NSNET_PREFIX, NULL);
+    afe_config.afe_ns_mode = NS_MODE_NET;
+    afe_config.afe_ns_model_name = model_name;
+#endif  /* CONFIG_USE_NSNET */
 
-    // Use new ESP-SR API to initialize configuration
-    afe_config_t *afe_config = afe_config_init(input_format, models, afe_type, afe_mode);
-    if (afe_config == NULL) {
-        ESP_LOGE(TAG, "Failed to initialize AFE config");
-        return ESP_FAIL;
+    if (!algo->aec_low_cost) {
+        afe_config.pcm_config.sample_rate = algo->sample_rate;
+        afe_config.voice_communication_init = true;
+        algo->afe_handle = &ESP_AFE_VC_HANDLE;
+    } else {
+        algo->afe_handle = &ESP_AFE_SR_HANDLE;
     }
-
-    // Configure AFE settings
-    afe_config->vad_init = false;
-    afe_config->wakenet_init = false;
-    afe_config->afe_perferred_core = 1;
-    afe_config->afe_perferred_priority = 21;
-    afe_config->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
-    afe_config->pcm_config.sample_rate = algo->sample_rate;
-
-#ifdef CONFIG_USE_NSNET
-    if (models) {
-        char *model_name = esp_srmodel_filter(models, ESP_NSNET_PREFIX, NULL);
-        afe_config->afe_ns_mode = NS_MODE_NET;
-        afe_config->afe_ns_model_name = model_name;
-    }
-#endif
 
     if (!(algo->algo_mask & ALGORITHM_STREAM_USE_AEC)) {
-        afe_config->aec_init = false;
+        afe_config.aec_init = false;
     }
 
     if (!(algo->algo_mask & ALGORITHM_STREAM_USE_NS)) {
-        afe_config->se_init = false;
+        afe_config.se_init = false;
     }
 
     if (algo->algo_mask & ALGORITHM_STREAM_USE_VAD) {
-        afe_config->vad_init = true;
+        afe_config.vad_init = true;
     }
 
-    // Note: AGC configuration may need to be adjusted based on new API
-    // The voice_communication_agc_init/gain fields may not exist in new API
-
-    // Use new ESP-SR API to get AFE handle
-    algo->afe_handle = esp_afe_handle_from_config(afe_config);
-    if (algo->afe_handle == NULL) {
-        ESP_LOGE(TAG, "Failed to get AFE handle from config");
-        audio_free(afe_config);
-        _algo_close(self);
-        return ESP_FAIL;
+    if (algo->algo_mask & ALGORITHM_STREAM_USE_AGC) {
+        afe_config.voice_communication_agc_init = true;
+        afe_config.voice_communication_agc_gain = algo->agc_gain;
     }
 
-    algo->afe_data = algo->afe_handle->create_from_config(afe_config);
-    audio_free(afe_config);
+    algo->afe_data = algo->afe_handle->create_from_config(&afe_config);
     algo->afe_fetch_run = true;
 
     xEventGroupClearBits(algo->state, FETCH_STOPPED_BIT);
