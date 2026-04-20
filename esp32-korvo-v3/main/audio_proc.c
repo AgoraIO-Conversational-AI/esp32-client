@@ -153,13 +153,17 @@ static void audio_send_thread(void *arg)
 
   audio_pipeline_run(recorder);
   audio_pipeline_run(player);
-  while (g_app.b_call_session_started) {
-    ret = raw_stream_read(raw_read, (char *)audio_pcm_buf, g_app.pcm_data_len);
-    if (ret != g_app.pcm_data_len) {
-      printf("read raw stream error, expect %d, but only %d\n", g_app.pcm_data_len, ret);
+  while (1) {
+    while (g_app.b_call_session_started) {
+      ret = raw_stream_read(raw_read, (char *)audio_pcm_buf, g_app.pcm_data_len);
+      if (ret != g_app.pcm_data_len) {
+        printf("read raw stream error, expect %d, but only %d\n", g_app.pcm_data_len, ret);
+      }
+
+      send_rtc_audio_frame(audio_pcm_buf, g_app.pcm_data_len);
     }
 
-    send_rtc_audio_frame(audio_pcm_buf, g_app.pcm_data_len);
+    audio_sema_post();
   }
 
   //deinit
@@ -176,6 +180,9 @@ THREAD_END:
 
 int playback_stream_write(char *data, int len)
 {
+  if (raw_write == NULL) {
+    return 0;
+  }
   return raw_stream_write(raw_write, data, len);
 }
 
