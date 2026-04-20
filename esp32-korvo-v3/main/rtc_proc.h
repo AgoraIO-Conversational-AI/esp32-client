@@ -15,6 +15,8 @@ extern "C" {
 
 int agora_rtc_proc_create(char *license, uint32_t uid);
 
+int agora_rtc_proc_rejoin(uint32_t uid);
+
 void agora_rtc_proc_destroy(void);
 
 int send_rtc_video_frame(uint8_t *data, uint32_t len);
