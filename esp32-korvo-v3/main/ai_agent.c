@@ -376,11 +376,17 @@ static int _query_running_agent_id(char *out_agent_id, size_t out_agent_id_len)
 {
     char query_url[JSON_URL_LEN] = {0};
     char auth_header[BASE64_BUFFER_LEN] = {0};
-    char resp_buf[MAX_HTTP_OUTPUT_BUFFER] = {0};
+    char *resp_buf = NULL;
 
     snprintf(query_url, JSON_URL_LEN, "%s/%s/agents?channel=%s&state=2&limit=20",
              AGORA_AI_AGENT_API_URL, g_app.app_id, g_app.channel_name);
     _build_auth_header(auth_header, sizeof(auth_header));
+
+    resp_buf = (char *)calloc(MAX_HTTP_OUTPUT_BUFFER, sizeof(char));
+    if (resp_buf == NULL) {
+        printf("Failed to allocate response buffer for agent query\n");
+        return -1;
+    }
 
     esp_http_client_config_t config = {
         .url               = query_url,
@@ -391,6 +397,7 @@ static int _query_running_agent_id(char *out_agent_id, size_t out_agent_id_len)
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
         printf("Failed to initialize HTTP client for agent query\n");
+        free(resp_buf);
         return -1;
     }
 
@@ -401,11 +408,12 @@ static int _query_running_agent_id(char *out_agent_id, size_t out_agent_id_len)
     if (err != ESP_OK) {
         printf("Agent query request failed: %s\n", esp_err_to_name(err));
         esp_http_client_cleanup(client);
+        free(resp_buf);
         return -1;
     }
 
     int status_code = esp_http_client_get_status_code(client);
-    int rlen = esp_http_client_read_response(client, resp_buf, sizeof(resp_buf) - 1);
+    int rlen = esp_http_client_read_response(client, resp_buf, MAX_HTTP_OUTPUT_BUFFER - 1);
     if (rlen > 0) {
         resp_buf[rlen] = '\0';
     } else {
@@ -415,6 +423,7 @@ static int _query_running_agent_id(char *out_agent_id, size_t out_agent_id_len)
 
     if (status_code != 200) {
         esp_http_client_cleanup(client);
+        free(resp_buf);
         return -1;
     }
 
@@ -422,6 +431,7 @@ static int _query_running_agent_id(char *out_agent_id, size_t out_agent_id_len)
     if (root == NULL) {
         printf("Agent query JSON parse error\n");
         esp_http_client_cleanup(client);
+        free(resp_buf);
         return -1;
     }
 
@@ -431,6 +441,7 @@ static int _query_running_agent_id(char *out_agent_id, size_t out_agent_id_len)
         printf("Agent query returned no running agent in channel %s\n", g_app.channel_name);
         cJSON_Delete(root);
         esp_http_client_cleanup(client);
+        free(resp_buf);
         return -1;
     }
 
@@ -440,6 +451,7 @@ static int _query_running_agent_id(char *out_agent_id, size_t out_agent_id_len)
         printf("Agent query missing agent_id\n");
         cJSON_Delete(root);
         esp_http_client_cleanup(client);
+        free(resp_buf);
         return -1;
     }
 
@@ -447,6 +459,7 @@ static int _query_running_agent_id(char *out_agent_id, size_t out_agent_id_len)
     out_agent_id[out_agent_id_len - 1] = '\0';
     cJSON_Delete(root);
     esp_http_client_cleanup(client);
+    free(resp_buf);
     return 0;
 }
 
@@ -454,7 +467,7 @@ static int _stop_agent_by_id(const char *agent_id)
 {
     char stop_url[JSON_URL_LEN] = {0};
     char auth_header[BASE64_BUFFER_LEN] = {0};
-    char resp_buf[MAX_HTTP_OUTPUT_BUFFER] = {0};
+    char *resp_buf = NULL;
 
     if (agent_id == NULL || strlen(agent_id) == 0) {
         printf("Invalid agent_id for stop\n");
@@ -463,6 +476,12 @@ static int _stop_agent_by_id(const char *agent_id)
 
     snprintf(stop_url, JSON_URL_LEN, "%s/%s/agents/%s/leave", AGORA_AI_AGENT_API_URL, g_app.app_id, agent_id);
     _build_auth_header(auth_header, sizeof(auth_header));
+
+    resp_buf = (char *)calloc(MAX_HTTP_OUTPUT_BUFFER, sizeof(char));
+    if (resp_buf == NULL) {
+        printf("Failed to allocate response buffer for AI Agent stop\n");
+        return -1;
+    }
 
     esp_http_client_config_t config = {
         .url               = stop_url,
@@ -473,6 +492,7 @@ static int _stop_agent_by_id(const char *agent_id)
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
         printf("Failed to initialize HTTP client for AI Agent stop\n");
+        free(resp_buf);
         return -1;
     }
 
@@ -483,11 +503,12 @@ static int _stop_agent_by_id(const char *agent_id)
     if (err != ESP_OK) {
         printf("HTTP request failed: %s\n", esp_err_to_name(err));
         esp_http_client_cleanup(client);
+        free(resp_buf);
         return -1;
     }
 
     int status_code = esp_http_client_get_status_code(client);
-    int rlen = esp_http_client_read_response(client, resp_buf, sizeof(resp_buf) - 1);
+    int rlen = esp_http_client_read_response(client, resp_buf, MAX_HTTP_OUTPUT_BUFFER - 1);
     if (rlen > 0) {
         resp_buf[rlen] = '\0';
     } else {
@@ -499,11 +520,13 @@ static int _stop_agent_by_id(const char *agent_id)
         printf("AI Agent stopped successfully: %s\n", agent_id);
         memset(g_app.agent_id, 0, sizeof(g_app.agent_id));
         esp_http_client_cleanup(client);
+        free(resp_buf);
         return 0;
     }
 
     printf("AI Agent stop failed with status %d\n", status_code);
     esp_http_client_cleanup(client);
+    free(resp_buf);
     return -1;
 }
 
@@ -511,9 +534,9 @@ static int _stop_agent_by_id(const char *agent_id)
 
 int ai_agent_start(void)
 {
-    char request[REQ_JSON_LEN] = {'\0'};
     char start_url[JSON_URL_LEN] = {0};
     char auth_header[BASE64_BUFFER_LEN] = {0};
+    char *request = NULL;
     int start_ok = -1;
     int attempt = 0;
 
@@ -531,19 +554,17 @@ int ai_agent_start(void)
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
-    char *json_buff = _build_agora_agent_join_json();
-    if (json_buff == NULL) {
+    request = _build_agora_agent_join_json();
+    if (request == NULL) {
         printf("Failed to build JSON request\n");
         return -1;
     }
 
-    if (strlen(json_buff) >= REQ_JSON_LEN) {
-        printf("JSON request too large (%d bytes), max is %d\n", (int)strlen(json_buff), REQ_JSON_LEN - 1);
-        free(json_buff);
+    if (strlen(request) >= REQ_JSON_LEN) {
+        printf("JSON request too large (%d bytes), max is %d\n", (int)strlen(request), REQ_JSON_LEN - 1);
+        free(request);
         return -1;
     }
-    snprintf(request, REQ_JSON_LEN, "%s", json_buff);
-    free(json_buff);
     printf("\n========== AI Agent START Request Body (%d bytes) ==========\n%s\n========== END START Request Body ==========\n",
            (int)strlen(request), request);
 
@@ -552,6 +573,7 @@ int ai_agent_start(void)
         esp_http_client_handle_t client = esp_http_client_init(&config);
         if (client == NULL) {
             printf("Failed to initialize HTTP client for AI Agent start\n");
+            free(request);
             return -1;
         }
 
@@ -611,6 +633,7 @@ int ai_agent_start(void)
             break;
         }
     }
+    free(request);
     return start_ok;
 }
 
