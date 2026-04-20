@@ -11,6 +11,31 @@
 
 static connection_id_t g_conn_id;
 
+static int _join_current_channel(uint32_t uid)
+{
+  int rval = -1;
+  rtc_channel_options_t channel_options = { 0 };
+
+  channel_options.auto_subscribe_audio = true;
+  channel_options.auto_subscribe_video = false;
+
+  /* If we want to send PCM data instead of encoded audio like AAC or Opus, here please enable
+   * audio codec, as well as configure the PCM sample rate and number of channels
+   */
+  channel_options.audio_codec_opt.audio_codec_type = g_app.rtc_audio_codec_type;
+  channel_options.audio_codec_opt.pcm_sample_rate  = g_app.pcm_sample_rate;
+  channel_options.audio_codec_opt.pcm_channel_num  = CONFIG_PCM_CHANNEL_NUM;
+
+  printf("Joining RTC channel: %s\n", g_app.channel_name);
+  rval = agora_rtc_join_channel(g_conn_id, g_app.channel_name, uid, g_app.token, &channel_options);
+  if (rval < 0) {
+    printf("Failed to join channel \"%s\", reason: %s\n", g_app.channel_name, agora_rtc_err_2_str(rval));
+    return -1;
+  }
+
+  return 0;
+}
+
 static void __on_join_channel_success(connection_id_t conn_id, uint32_t uid, int elapsed)
 {
   connection_info_t conn_info = { 0 };
@@ -176,25 +201,14 @@ int agora_rtc_proc_create(char *license, uint32_t uid)
     return -1;
   }
 
-  // 3. API: join channel
-  rtc_channel_options_t channel_options = { 0 };
-  channel_options.auto_subscribe_audio = true;
-  channel_options.auto_subscribe_video = false;
+  return _join_current_channel(uid);
+}
 
-  /* If we want to send PCM data instead of encoded audio like AAC or Opus, here please enable
-   * audio codec, as well as configure the PCM sample rate and number of channels
-   */
-  channel_options.audio_codec_opt.audio_codec_type = g_app.rtc_audio_codec_type;
-  channel_options.audio_codec_opt.pcm_sample_rate  = g_app.pcm_sample_rate;
-  channel_options.audio_codec_opt.pcm_channel_num  = CONFIG_PCM_CHANNEL_NUM;
-
-  rval = agora_rtc_join_channel(g_conn_id, g_app.channel_name, uid, g_app.token, &channel_options);
-  if (rval < 0) {
-    printf("Failed to join channel \"%s\", reason: %s\n", g_app.channel_name, agora_rtc_err_2_str(rval));
-    return -1;
-  }
-
-  return 0;
+int agora_rtc_proc_rejoin(uint32_t uid)
+{
+  g_app.b_call_session_started = false;
+  agora_rtc_leave_channel(g_conn_id);
+  return _join_current_channel(uid);
 }
 
 void agora_rtc_proc_destroy(void)
