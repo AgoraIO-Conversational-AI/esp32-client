@@ -120,6 +120,14 @@ static esp_err_t input_key_service_cb(periph_service_handle_t handle, periph_ser
       printf("[ * ] [Start] Start Ai Agent\n");
       if (evt->type == INPUT_KEY_SERVICE_ACTION_CLICK_RELEASE) {
         if (!g_app.b_ai_agent_joined) {
+          if (ai_agent_load_config() != 0) {
+            printf("Failed to reload AI agent config from app_config.h\n");
+            break;
+          }
+          if (agora_rtc_proc_rejoin(g_app.remote_rtc_uid) != 0) {
+            printf("Failed to rejoin RTC channel %s\n", g_app.channel_name);
+            break;
+          }
           // start ai agent
           int start_ret = ai_agent_start();
           if (start_ret == 0) {
