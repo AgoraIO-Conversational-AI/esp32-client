@@ -23,6 +23,7 @@ extern const char app_config_json_end[] asm("_binary_app_config_h_end");
 #define MAX_HTTP_OUTPUT_BUFFER 4096
 #define BASE64_BUFFER_LEN      256
 #define START_RETRY_DELAY_MS   800
+#define CHANNEL_SUFFIX_LEN     14
 
 static const char base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static void base64_encode(const char *input, char *output, int input_len) {
@@ -92,6 +93,38 @@ static int _parse_uid_string(const cJSON *uid_item, uint32_t *out_uid)
     return 0;
 }
 
+static int _build_randomized_channel_name(const char *base_channel, char *out_channel, size_t out_channel_len)
+{
+    uint32_t random_value = 0;
+    uint32_t tick_value = 0;
+    int suffix_len = 0;
+    int base_len = 0;
+
+    if (base_channel == NULL || out_channel == NULL || out_channel_len <= CHANNEL_SUFFIX_LEN) {
+        return -1;
+    }
+
+    random_value = esp_random();
+    tick_value = (uint32_t)xTaskGetTickCount();
+    suffix_len = snprintf(out_channel, out_channel_len, "_%08lx_%04lx",
+                          (unsigned long)random_value,
+                          (unsigned long)(tick_value & 0xFFFF));
+    if (suffix_len <= 0 || (size_t)suffix_len >= out_channel_len) {
+        return -1;
+    }
+
+    base_len = (int)strlen(base_channel);
+    if ((size_t)(base_len + suffix_len + 1) > out_channel_len) {
+        base_len = (int)(out_channel_len - (size_t)suffix_len - 1);
+    }
+
+    memcpy(out_channel, base_channel, (size_t)base_len);
+    snprintf(out_channel + base_len, out_channel_len - (size_t)base_len, "_%08lx_%04lx",
+             (unsigned long)random_value,
+             (unsigned long)(tick_value & 0xFFFF));
+    return 0;
+}
+
 static int _load_output_audio_codec(const cJSON *properties)
 {
     const cJSON *parameters = NULL;
@@ -126,6 +159,7 @@ static int _load_output_audio_codec(const cJSON *properties)
 int ai_agent_load_config(void)
 {
     char *config_json = NULL;
+    char randomized_channel[AI_AGENT_CHANNEL_LEN] = {0};
     cJSON *root = NULL;
     cJSON *properties = NULL;
     cJSON *name = NULL;
@@ -167,11 +201,18 @@ int ai_agent_load_config(void)
 
     strncpy(g_app.agent_name, name->valuestring, AI_AGENT_NAME_LEN - 1);
     g_app.agent_name[AI_AGENT_NAME_LEN - 1] = '\0';
-    strncpy(g_app.channel_name, channel->valuestring, AI_AGENT_CHANNEL_LEN - 1);
+    if (_build_randomized_channel_name(channel->valuestring, randomized_channel, sizeof(randomized_channel)) != 0) {
+        printf("Failed to build randomized channel name from app_config.h\n");
+        cJSON_Delete(root);
+        free(config_json);
+        return -1;
+    }
+    strncpy(g_app.channel_name, randomized_channel, AI_AGENT_CHANNEL_LEN - 1);
     g_app.channel_name[AI_AGENT_CHANNEL_LEN - 1] = '\0';
 
-    printf("Loaded agent config: name=%s, channel=%s, agent_rtc_uid=%lu, remote_rtc_uid=%lu, sample_rate=%d, frame_len=%d\n",
+    printf("Loaded agent config: name=%s, base_channel=%s, runtime_channel=%s, agent_rtc_uid=%lu, remote_rtc_uid=%lu, sample_rate=%d, frame_len=%d\n",
            g_app.agent_name,
+           channel->valuestring,
            g_app.channel_name,
            (unsigned long)g_app.agent_rtc_uid,
            (unsigned long)g_app.remote_rtc_uid,
@@ -283,6 +324,8 @@ static char *_build_agora_agent_join_json(void)
     char *config_json = NULL;
     char *json_ptr = NULL;
     cJSON *root = NULL;
+    cJSON *properties = NULL;
+    cJSON *channel = NULL;
 
     config_json = _duplicate_embedded_app_config();
     if (config_json == NULL) {
@@ -292,6 +335,21 @@ static char *_build_agora_agent_join_json(void)
     root = cJSON_Parse(config_json);
     if (root == NULL) {
         printf("Embedded app_config.h is not valid JSON\n");
+        free(config_json);
+        return NULL;
+    }
+
+    properties = cJSON_GetObjectItemCaseSensitive(root, "properties");
+    channel = cJSON_GetObjectItemCaseSensitive(properties, "channel");
+    if (!cJSON_IsString(channel) || channel->valuestring == NULL) {
+        printf("Embedded app_config.h is missing properties.channel\n");
+        cJSON_Delete(root);
+        free(config_json);
+        return NULL;
+    }
+    if (!cJSON_SetValuestring(channel, g_app.channel_name)) {
+        printf("Failed to update request JSON channel\n");
+        cJSON_Delete(root);
         free(config_json);
         return NULL;
     }
